@@ -1,5 +1,8 @@
 # Meta-MAPG
-Source code for ''A Policy Gradient Algorithm for Learning to Learn in Multiagent Reinforcement Learning''
+Source code for "A Policy Gradient Algorithm for Learning to Learn in Multiagent Reinforcement Learning"
+
+## Note
+This repository is not maintained. Please refer to [this repository](https://github.com/dkkim93/meta-mapg) for updated code.
 
 ## Dependency
 Known dependencies are (please also refer to `requirements.txt`):
