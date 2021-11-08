@@ -181,15 +181,15 @@ class MujocoMulti(MultiAgentEnv):
         self.steps = 0
         self.timelimit_env.reset()
         return self.get_obs()
+    
+    def seed(self, seed):
+        self.env.seed(seed)
 
     def render(self, **kwargs):
         self.env.render(**kwargs)
 
     def close(self):
-        raise NotImplementedError
-
-    def seed(self, args):
-        pass
+        self.env.close()
 
     def get_env_info(self):
 
