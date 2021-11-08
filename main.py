@@ -122,6 +122,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--n-agent", type=int, default=2,
         help="Number of agents in a shared environment")
+    # MAMujoco
+    parser.add_argument("--agent-conf", type=str, default=None)
+    parser.add_argument("--agent-obsk", type=int, default=0)
 
     # Misc
     parser.add_argument(
