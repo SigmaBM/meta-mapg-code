@@ -1,6 +1,7 @@
 import torch
-from meta.base import Base
 from misc.torch_utils import change_name
+
+from meta.base import Base
 
 
 class Peer(Base):
@@ -12,9 +13,11 @@ class Peer(Base):
         name (str): Specifies agent's name
         i_agent (int): Agent index among the agents in the shared environment
         rank (int): Used for thread-specific meta-agent for multiprocessing. Default: -1
+        rnn (bool): Whether use LSTM actor and critic
     """
-    def __init__(self, log, tb_writer, args, name, i_agent, rank=-1):
+    def __init__(self, log, tb_writer, args, name, i_agent, rank=-1, rnn=False):
         super(Peer, self).__init__(log, tb_writer, args, name, i_agent, rank)
+        self._use_rnn = rnn
 
         self._set_dim()
         self._set_action_type()
@@ -29,11 +32,19 @@ class Peer(Base):
             self.is_tabular_policy = True
         else:
             if self.is_discrete_action:
-                from network.categorical_lstm import ActorNetwork
-                self.log[self.args.log_name].info("[{}] Set Categorical LSTM policy".format(self.name))
+                if self._use_rnn:
+                    from network.categorical_lstm import ActorNetwork
+                    self.log[self.args.log_name].info("[{}] Set Categorical LSTM policy".format(self.name))
+                else:
+                    from network.categorical_mlp import ActorNetwork
+                    self.log[self.args.log_name].info("[{}] Set Categorical MLP policy".format(self.name))
             else:
-                from network.gaussian_lstm import ActorNetwork
-                self.log[self.args.log_name].info("[{}] Set Gaussian LSTM policy".format(self.name))
+                if self._use_rnn:
+                    from network.gaussian_lstm import ActorNetwork
+                    self.log[self.args.log_name].info("[{}] Set Gaussian LSTM policy".format(self.name))
+                else:
+                    from network.gaussian_mlp import ActorNetwork
+                    self.log[self.args.log_name].info("[{}] Set Gaussian MLP policy".format(self.name))
 
             self.actor = ActorNetwork(self.input_dim, self.output_dim, self.name, self.args)
             self.log[self.args.log_name].info("[{}] {}".format(self.name, self.actor))
@@ -44,6 +55,7 @@ class Peer(Base):
             self.actor = torch.nn.Parameter(torch.from_numpy(persona).float(), requires_grad=True)
         else:
             self.log[self.args.log_name].info("[{}] Set persona: {}".format(self.name, persona["iteration"]))
-            actor = torch.load(persona["filepath"])["actor_state_dict"]
+            # actor = torch.load(persona["filepath"])["actor_state_dict"]
+            actor = torch.load(persona["filepath"])
             actor = change_name(actor, old="teammate", new="peer")
-            self.actor.load_state_dict(actor)
+            self.actor.load_state_dict(actor, False)
