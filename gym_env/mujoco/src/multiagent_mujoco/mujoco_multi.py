@@ -36,6 +36,7 @@ class MujocoMulti(MultiAgentEnv):
         super().__init__(batch_size, **kwargs)
         self.scenario = kwargs["env_args"]["scenario"] # e.g. Ant-v2
         self.agent_conf = kwargs["env_args"]["agent_conf"] # e.g. '2x3'
+        self.inverse_reward = kwargs["env_args"]["inv_rew"] # e.g. False
 
         self.agent_partitions, self.mujoco_edges, self.mujoco_globals  = get_parts_and_edges(self.scenario,
                                                                                              self.agent_conf)
@@ -123,6 +124,9 @@ class MujocoMulti(MultiAgentEnv):
         flat_actions = np.concatenate([actions[i][:self.action_space[i].low.shape[0]] for i in range(self.n_agents)])
         obs_n, reward_n, done_n, info_n = self.wrapped_env.step(flat_actions)
         self.steps += 1
+
+        if self.inverse_reward:
+            reward_n = -info_n["reward_run"] + info_n["reward_ctrl"]
 
         info = {}
         info.update(info_n)
