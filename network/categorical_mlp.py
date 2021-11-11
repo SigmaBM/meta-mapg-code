@@ -27,12 +27,14 @@ class ActorNetwork(nn.Module):
         if params is None:
             params = OrderedDict(self.named_parameters())
 
+        x, (hx, cx) = x
+
         x = F.relu(F.linear(x, weight=params[self.name + "_l1.weight"], bias=params[self.name + "_l1.bias"]))
         x = F.relu(F.linear(x, weight=params[self.name + "_l2.weight"], bias=params[self.name + "_l2.bias"]))
         x = F.linear(x, weight=params[self.name + "_l3.weight"], bias=params[self.name + "_l3.bias"])
         x = F.softmax(x, dim=1)
 
-        return x
+        return x, (hx, cx)
 
 
 class ValueNetwork(nn.Module):

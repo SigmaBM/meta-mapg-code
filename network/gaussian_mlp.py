@@ -1,8 +1,9 @@
 import math
+from collections import OrderedDict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from collections import OrderedDict
 from misc.torch_utils import weight_init
 
 
@@ -32,12 +33,14 @@ class ActorNetwork(nn.Module):
         if params is None:
             params = OrderedDict(self.named_parameters())
 
+        x, (hx, cx) = x
+
         x = F.relu(F.linear(x, weight=params[self.name + "_l1.weight"], bias=params[self.name + "_l1.bias"]))
         x = F.relu(F.linear(x, weight=params[self.name + "_l2.weight"], bias=params[self.name + "_l2.bias"]))
         mu = F.linear(x, weight=params[self.name + "_l3_mu.weight"], bias=params[self.name + "_l3_mu.bias"])
         scale = torch.exp(torch.clamp(params[self.name + '_l3_sigma'], min=self.min_log_std))
 
-        return mu, scale
+        return mu, scale, (hx, cx)
 
 
 class ValueNetwork(nn.Module):
