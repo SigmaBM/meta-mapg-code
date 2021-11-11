@@ -109,6 +109,7 @@ log/
 venv/
 notebook/data/
 pytorch_models/
+debug/
 
 # PyTorch files
 *.pth
