@@ -16,12 +16,13 @@ from tianshou.data import ReplayBuffer, VectorReplayBuffer
 from tianshou.env import DummyVectorEnv, SubprocVectorEnv
 from tianshou.policy import SACPolicy
 from tianshou.utils.net.common import Net
-from tianshou.utils.net.continuous import ActorProb, Critic
+from tianshou.utils.net.continuous import ActorProb as ActorProb0
+from tianshou.utils.net.continuous import Critic as Critic0
 from torch.utils.tensorboard import SummaryWriter
 
 from pretrain_mujoco.macollector import MACollector
 from pretrain_mujoco.offpolicy import offpolicy_trainer
-from pretrain_mujoco.utils import BasicLogger
+from pretrain_mujoco.utils import ActorProb, BasicLogger, Critic
 
 
 def get_args():
@@ -30,9 +31,10 @@ def get_args():
     parser.add_argument('--agent-conf', type=str, default='2x3')
     parser.add_argument('--agent-obsk', type=int, default=None)
     parser.add_argument('--ep-limit', type=int, default=200)
+    parser.add_argument('--inv-rew',action="store_true")
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--buffer-size', type=int, default=1000000)
-    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[64, 64])
+    parser.add_argument('--hidden-sizes', type=int, default=64)
     parser.add_argument('--actor-lr', type=float, default=1e-3)
     parser.add_argument('--critic-lr', type=float, default=1e-3)
     parser.add_argument('--gamma', type=float, default=0.99)
@@ -40,7 +42,6 @@ def get_args():
     parser.add_argument('--alpha', type=float, default=0.2)
     parser.add_argument('--auto-alpha', default=False, action='store_true')
     parser.add_argument('--alpha-lr', type=float, default=3e-4)
-    parser.add_argument('--cond-sigma', action="store_true")
     parser.add_argument("--start-timesteps", type=int, default=10000)
     parser.add_argument('--epoch', type=int, default=200)
     parser.add_argument('--step-per-epoch', type=int, default=5000)
@@ -58,6 +59,7 @@ def get_args():
     parser.add_argument('--resume-path', type=str, default=None)
     parser.add_argument('--watch', default=False, action='store_true',
                         help='watch the play of pre-trained policy only')
+    parser.add_argument('--save-interval', type=int, default=0)
     return parser.parse_args()
 
 
@@ -67,6 +69,7 @@ def main(args=get_args()):
             "agent_conf": args.agent_conf,
             "agent_obsk": args.agent_obsk,
             "episode_limit": args.ep_limit,
+            "inv_rew": args.inv_rew,
         }
     env = MujocoMulti(env_args=env_args)
     args.state_shape = [ob.shape or ob.n for ob in env.observation_space]
@@ -96,19 +99,17 @@ def main(args=get_args()):
 
     policies = []
     for i in range(env.n_agents):
-        net_a = Net(args.state_shape[i], hidden_sizes=args.hidden_sizes, device=args.device)
         actor = ActorProb(
-            net_a, args.action_shape[i], max_action=args.max_action,
-            device=args.device, unbounded=True, conditioned_sigma=args.cond_sigma
-        ).to(args.device)
+            "teammate" + str(i), args.state_shape[i], args.action_shape[i], args.hidden_sizes,
+            args.max_action, args.device, True, False).to(args.device)
         actor_optim = torch.optim.Adam(actor.parameters(), lr=args.actor_lr)
-        net_c1 = Net(args.state_shape[i], args.action_shape[i], hidden_sizes=args.hidden_sizes,
-                     concat=True, device=args.device)
-        net_c2 = Net(args.state_shape[i], args.action_shape[i], hidden_sizes=args.hidden_sizes,
-                     concat=True, device=args.device)
-        critic1 = Critic(net_c1, device=args.device).to(args.device)
+        critic1 = Critic(
+            "teammate" + str(i), args.state_shape[i], args.action_shape[i], args.hidden_sizes,
+            args.device).to(args.device)
         critic1_optim = torch.optim.Adam(critic1.parameters(), lr=args.critic_lr)
-        critic2 = Critic(net_c2, device=args.device).to(args.device)
+        critic2 = Critic(
+            "teammate" + str(i), args.state_shape[i], args.action_shape[i], args.hidden_sizes,
+            args.device).to(args.device)
         critic2_optim = torch.optim.Adam(critic2.parameters(), lr=args.critic_lr)
 
         if args.auto_alpha:
@@ -149,7 +150,7 @@ def main(args=get_args()):
             policies, train_collector, test_collector, args.epoch,
             args.step_per_epoch, args.step_per_collect, args.test_num,
             args.batch_size, logger=logger, update_per_step=args.update_per_step, 
-            test_in_train=False)
+            test_in_train=False, save_interval=args.save_interval)
         pprint.pprint(result)
 
     # Let's watch its performance!

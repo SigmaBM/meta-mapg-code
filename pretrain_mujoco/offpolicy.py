@@ -1,9 +1,12 @@
+import os
 import time
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
+import torch
 import tqdm
+from numpy.lib.npyio import save
 from tianshou.policy import BasePolicy
 from tianshou.trainer import gather_info
 from tianshou.utils import BaseLogger, LazyLogger, MovAvg, tqdm_config
@@ -24,6 +27,7 @@ def offpolicy_trainer(
     logger: BaseLogger = LazyLogger(),
     verbose: bool = True,
     test_in_train: bool = True,
+    save_interval: int = 0,
 ) -> Dict[str, Union[float, str]]:
     """A wrapper for off-policy trainer procedure.
 
@@ -65,6 +69,11 @@ def offpolicy_trainer(
     test_collector.reset_stat()
     test_result = test_episode(policies, test_collector, 0, episode_per_test,
                                logger, env_step)
+
+    if save_interval > 0:
+        for i in range(len(policies)):
+            os.makedirs(os.path.join(logger.writer.log_dir, 'models-{}'.format(i)), exist_ok=True)
+
     for epoch in range(1, 1 + max_epoch):
         # train
         [pi.train() for pi in policies]
@@ -109,6 +118,12 @@ def offpolicy_trainer(
             print(f"Epoch #{epoch}:")
             for i in range(len(policies)):
                 print(f"Agent {i} - test_reward: {rew[i]:.6f} ± {rew_std[i]:.6f};")
+        
+        if save_interval > 0 and (epoch == 1 or epoch % save_interval == 0):
+            for i in range(len(policies)):
+                torch.save(
+                    policies[i].actor.state_dict(), # only save actor
+                    os.path.join(logger.writer.log_dir, 'models-{}'.format(i), '{}'.format(epoch)))
 
     return gather_info(start_time, train_collector, test_collector)
 

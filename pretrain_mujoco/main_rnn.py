@@ -31,6 +31,7 @@ def get_args():
     parser.add_argument('--agent-conf', type=str, default='2x3')
     parser.add_argument('--agent-obsk', type=int, default=None)
     parser.add_argument('--ep-limit', type=int, default=200)
+    parser.add_argument('--inv-rew',action="store_true")
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--stack-num', type=int, default=10)
     parser.add_argument('--buffer-size', type=int, default=1000000)
@@ -68,6 +69,7 @@ def main(args=get_args()):
             "agent_conf": args.agent_conf,
             "agent_obsk": args.agent_obsk,
             "episode_limit": args.ep_limit,
+            "inv_rew": args.inv_rew,
         }
     env = MujocoMulti(env_args=env_args)
     args.state_shape = [ob.shape or ob.n for ob in env.observation_space]

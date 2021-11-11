@@ -3,12 +3,71 @@ from typing import Any, AnyStr, Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from tianshou.utils.log_tools import BaseLogger
 from torch import nn
 from torch.utils.tensorboard.writer import SummaryWriter
 
 SIGMA_MIN = -20
 SIGMA_MAX = 2
+
+
+class ActorProb(nn.Module):
+    def __init__(
+        self,
+        name: str,
+        state_shape: Sequence[int],
+        action_shape: Sequence[int],
+        hidden_layer_size: int = 128,
+        max_action: float = 1.0,
+        device: Union[str, int, torch.device] = "cpu",
+        unbounded: bool = False,
+        conditioned_sigma: bool = False,
+    ) -> None:
+        super().__init__()
+        self.device = device
+
+        input_dim = int(np.prod(state_shape))
+        output_dim = int(np.prod(action_shape))
+        setattr(self, name + "_actor_l1", nn.Linear(input_dim, hidden_layer_size))
+        setattr(self, name + "_actor_l2", nn.Linear(hidden_layer_size, hidden_layer_size))
+        setattr(self, name + "_actor_l3_mu", nn.Linear(hidden_layer_size, output_dim))
+        
+        self._c_sigma = conditioned_sigma
+        if conditioned_sigma:
+            setattr(self, name + "_actor_l3_sigma", nn.Linear(hidden_layer_size, output_dim))
+        else:
+            setattr(self, name + "_actor_l3_sigma", nn.Parameter(torch.zeros(output_dim,)))
+        
+        self.name = name + "_actor"
+        self._max = max_action
+        self._unbounded = unbounded
+
+    def forward(
+        self,
+        s: Union[np.ndarray, torch.Tensor],
+        state: Optional[Dict[str, torch.Tensor]] = None,
+        info: Dict[str, Any] = {},
+    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor], Dict[str, torch.Tensor]]:
+        """Almost the same as :class:`~tianshou.utils.net.common.Recurrent`."""
+        s = torch.as_tensor(
+            s, device=self.device, dtype=torch.float32)  # type: ignore
+        s = F.relu(getattr(self, self.name + "_l1")(s))
+        s = F.relu(getattr(self, self.name + "_l2")(s))
+        mu = getattr(self, self.name + "_l3_mu")(s)
+        if not self._unbounded:
+            mu = self._max * torch.tanh(mu)
+        # fc3 - sigma
+        if self._c_sigma:
+            sigma = torch.clamp(
+                getattr(self, self.name + "_l3_sigma")(s), min=SIGMA_MIN, max=SIGMA_MAX
+            ).exp()
+        else:
+            shape = [1] * len(mu.shape)
+            shape[1] = -1
+            sigma = (getattr(self, self.name + "_l3_sigma").view(shape) + torch.zeros_like(mu)).exp()
+        # please ensure the first dim is batch size: [bsz, len, ...]
+        return (mu, sigma), state
 
 
 class RecurrentActorProb(nn.Module):
@@ -42,7 +101,7 @@ class RecurrentActorProb(nn.Module):
         if conditioned_sigma:
             setattr(self, name + "_actor_l3_sigma", nn.Linear(hidden_layer_size, output_dim))
         else:
-            setattr(self, name + "_actor_l3_sigma", nn.Parameter(torch.zeros(output_dim, 1)))
+            setattr(self, name + "_actor_l3_sigma", nn.Parameter(torch.zeros(output_dim,)))
         
         self.name = name + "_actor"
         self._max = max_action
@@ -64,6 +123,7 @@ class RecurrentActorProb(nn.Module):
             s = s.unsqueeze(-2)
         # fc1 (before LSTM)
         s = getattr(self, self.name + "_l1")(s)
+        s = F.relu(s)
         # LSTM
         getattr(self, self.name + "_l2").flatten_parameters()
         if state is None:
@@ -91,6 +151,45 @@ class RecurrentActorProb(nn.Module):
                              "c": c.transpose(0, 1).detach()}
 
 
+class Critic(nn.Module):
+    def __init__(
+        self,
+        name: str,
+        state_shape: Sequence[int],
+        action_shape: Sequence[int] = [0],
+        hidden_layer_size: int = 128,
+        device: Union[str, int, torch.device] = "cpu",
+    ) -> None:
+        super().__init__()
+        self.device = device
+        
+        input_dim = int(np.prod(state_shape)) + int(np.prod(action_shape))
+        setattr(self, name + "_value_l1", nn.Linear(input_dim, hidden_layer_size))
+        setattr(self, name + "_value_l2", nn.Linear(hidden_layer_size, hidden_layer_size))
+        setattr(self, name + "_value_l3", nn.Linear(hidden_layer_size, 1))
+
+        self.name = name + "_value"
+
+    def forward(
+        self,
+        s: Union[np.ndarray, torch.Tensor],
+        a: Optional[Union[np.ndarray, torch.Tensor]] = None,
+        info: Dict[str, Any] = {},
+    ) -> torch.Tensor:
+        """Almost the same as :class:`~tianshou.utils.net.common.Recurrent`."""
+        s = torch.as_tensor(
+            s, device=self.device, dtype=torch.float32)  # type: ignore
+        if a is not None:
+            a = torch.as_tensor(
+                a, device=self.device, dtype=torch.float32)  # type: ignore
+            s = torch.cat([s, a], dim=1)
+        s = F.relu(getattr(self, self.name + "_l1")(s))
+        s = F.relu(getattr(self, self.name + "_l2")(s))
+        value = getattr(self, self.name + "_l3")(s)
+
+        return value
+
+
 class RecurrentCritic(nn.Module):
     """Recurrent version of Critic.
 
@@ -111,7 +210,9 @@ class RecurrentCritic(nn.Module):
         
         setattr(self, name + "_value_l1", nn.Linear(int(np.prod(state_shape)), hidden_layer_size))
         setattr(self, name + "_value_l2", nn.LSTM(hidden_layer_size, hidden_layer_size, batch_first=True))
-        setattr(self, name + "_value_l3", nn.Linear(hidden_layer_size + int(np.prod(action_shape)), 1))
+        setattr(self, name + "_value_l3", nn.Linear(hidden_layer_size + int(np.prod(action_shape)), hidden_layer_size))
+        setattr(self, name + "_value_l4", nn.Linear(hidden_layer_size, hidden_layer_size))
+        setattr(self, name + "_value_l5", nn.Linear(hidden_layer_size, 1))
 
         self.name = name + "_value"
 
@@ -130,6 +231,7 @@ class RecurrentCritic(nn.Module):
         assert len(s.shape) == 3
         # fc1 (before LSTM)
         s = getattr(self, self.name + "_l1")(s)
+        s = F.relu(s)
         # LSTM
         getattr(self, self.name + "_l2").flatten_parameters()
         s, (h, c) = getattr(self, self.name + "_l2")(s)
@@ -138,7 +240,9 @@ class RecurrentCritic(nn.Module):
             a = torch.as_tensor(
                 a, device=self.device, dtype=torch.float32)  # type: ignore
             s = torch.cat([s, a], dim=1)
-        value = getattr(self, self.name + "_l3")(s)
+        s = F.relu(getattr(self, self.name + "_l3")(s))
+        s = F.relu(getattr(self, self.name + "_l4")(s))
+        value = getattr(self, self.name + "_l5")(s)
 
         return value
 
