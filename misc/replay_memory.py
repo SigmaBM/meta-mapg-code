@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 
@@ -10,14 +11,16 @@ class ReplayMemory(object):
     def __init__(self, args):
         self.args = args
 
-        self.obs = []
+        self.obs = [[] for _ in range(args.n_agent)]
         self.logprobs = [[] for _ in range(args.n_agent)]
         self.entropies = [[] for _ in range(args.n_agent)]
         self.values = [[] for _ in range(args.n_agent)]
         self.rewards = [[] for _ in range(args.n_agent)]
 
     def add(self, obs, logprobs, entropies, values, rewards):
-        self.obs.append(obs)
+        # self.obs.append(obs)
+        for obs_memory, ob in zip(self.obs, obs):
+            obs_memory.append(ob)
 
         for logprob_memory, logprob in zip(self.logprobs, logprobs):
             logprob_memory.append(logprob)
@@ -30,7 +33,7 @@ class ReplayMemory(object):
 
         if isinstance(rewards, list):
             for reward_memory, reward in zip(self.rewards, rewards):
-                reward_memory.append(torch.from_numpy(reward).float())
+                reward_memory.append(torch.from_numpy(np.array(reward)).float())
         else:
             for i_agent in range(self.args.n_agent):
                 self.rewards[i_agent].append(torch.from_numpy(rewards[:, i_agent]).float())

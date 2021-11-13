@@ -1,0 +1,30 @@
+#################################################################################
+# ALGORITHM
+#################################################################################
+# Discount factor in reinforcement learning
+actor_lr_inner: 0.005
+actor_lr_outer: 0.00005
+value_lr: 0.000055
+discount: 0.95
+
+# Markov chain terminates when chain horizon is reached
+chain_horizon: 2
+
+# Try MLP meta-agent
+use_rnn: False
+
+#################################################################################
+# ENV
+#################################################################################
+# OpenAI gym environment name
+env_name: "HalfCheetah-v2"
+
+# Episode terminates when horizon is reached
+ep_horizon: 200
+
+#################################################################################
+# MISC
+#################################################################################
+log_path: "log"
+model_path: "log/HalfCheetah-v2/sac/seed_0_1111_180433-HalfCheetah_v2_sac"
+save_interval: 10

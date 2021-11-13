@@ -1,27 +1,40 @@
-import time
-import os
 import argparse
+import datetime
+import json
+import os
+import os.path as osp
 import random
+import time
+
+import numpy as np
 import torch
 import torch.multiprocessing as mp
-import numpy as np
+from tensorboardX import SummaryWriter
+
+from meta.meta_agent import MetaAgent
+from misc.utils import load_config, set_log
+from tester import meta_test
 from trainer import meta_train
 from validator import meta_val
-from tester import meta_test
-from misc.utils import load_config, set_log
-from meta.meta_agent import MetaAgent
-from tensorboardX import SummaryWriter
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def main(args):
     # Set logging
-    if not os.path.exists("./log"):
-        os.makedirs("./log")
+    t0 = datetime.datetime.now().strftime("%m%d_%H%M%S")
+    args.log_path = osp.join(args.log_path, "meta-mapg", args.env_name,
+                             f'seed_{args.seed}_{t0}-{args.env_name.replace("-", "_")}_metamapg')
+    if not os.path.exists(args.log_path + "/log"):
+        os.makedirs(args.log_path + "/log")
 
     log = set_log(args)
-    tb_writer = SummaryWriter('./log/tb_{0}'.format(args.log_name))
+    # tb_writer = SummaryWriter(args.log_path + '/log/tb_{0}'.format(args.log_name))
+    tb_writer = None    # SummaryWriter cannot be serialized!
+
+    # Use a JSON file to save arguments
+    with open(osp.join(args.log_path, 'params.json'), 'w') as f:
+        f.write(json.dumps(vars(args)))
 
     # Set seeds
     random.seed(args.seed)
@@ -32,11 +45,22 @@ def main(args):
 
     # For GPU, Set start method for multithreading
     if device == torch.device("cuda"):
-        torch.multiprocessing.set_start_method('spawn')
+        # torch.multiprocessing.set_start_method('spawn')
+        mp = torch.multiprocessing.get_context("spawn")
+    
+    # Split training, validation and test pretrain model randomly
+    if args.env_name not in ["IPD-v0", "RPS-v0"]:
+        split_pretrained_models(args.env_name, args.model_path)
 
     # Initialize shared meta-agent
     shared_meta_agent = MetaAgent(log, tb_writer, args, name="meta-agent", i_agent=0)
     shared_meta_agent.share_memory()
+    
+    if args.resume_path:
+        log[log.name].info("Resume training from {}".format(args.resume_path))
+
+    # Used for debug
+    # meta_train(shared_meta_agent, mp.Manager().dict(), 0, log, args)
 
     # Begin either meta-train or meta-test
     if not args.test_mode:
@@ -63,6 +87,46 @@ def main(args):
     else:
         # Start meta-test
         meta_test(shared_meta_agent, log, tb_writer, args)
+
+
+def split_pretrained_models(
+    task: str,
+    path: str, 
+    range_tr_va_lb: int = 1,
+    range_tr_va_ub: int = 300,
+    range_ts_lb: int = 475,
+    range_ts_ub: int = 500,
+    num_tr: int = 275
+) -> None:
+    list_all = os.listdir(osp.join(path, "models-1"))
+    list_all = list(map(int, list_all))
+    list_all.sort()
+    list_all = list(map(str, list_all))
+    rand_list_tr_va = np.random.permutation(list_all[range_tr_va_lb - 1: range_tr_va_ub])
+    list_tr = rand_list_tr_va[: num_tr]
+    list_va = rand_list_tr_va[num_tr: ]
+    list_ts = list_all[range_ts_lb - 1: range_ts_ub]
+    # set train
+    os.makedirs(osp.join("pretrain_model", task, "train"), exist_ok=True)
+    print("Copy training persona...")
+    for f in list_tr:
+        old_path = osp.join(path, "models-1", f)
+        new_path = osp.join("pretrain_model", task, "train", f)
+        os.system("cp {} {}".format(old_path, new_path))
+    # set valid
+    os.makedirs(osp.join("pretrain_model", task, "valid"), exist_ok=True)
+    print("Copy validation persona...")
+    for f in list_va:
+        old_path = osp.join(path, "models-1", f)
+        new_path = osp.join("pretrain_model", task, "valid", f)
+        os.system("cp {} {}".format(old_path, new_path))
+    # set test
+    os.makedirs(osp.join("pretrain_model", task, "test"), exist_ok=True)
+    print("Copy testing persona...")
+    for f in list_ts:
+        old_path = osp.join(path, "models-1", f)
+        new_path = osp.join("pretrain_model", task, "test", f)
+        os.system("cp {} {}".format(old_path, new_path))
 
 
 if __name__ == "__main__":
@@ -111,6 +175,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max-train-iteration", type=int, default=1e5,
         help="Terminate program when max train iteration is reached")
+    parser.add_argument(
+        "--use-rnn", action="store_true", 
+        help="Whether to use LSTM model in meta-agent"
+    )
+    parser.add_argument(
+        "--resume-path", type=str,
+        help="Load a trained meta-agent to resume training"
+    )
 
     # Env
     parser.add_argument(
@@ -123,16 +195,28 @@ if __name__ == "__main__":
         "--n-agent", type=int, default=2,
         help="Number of agents in a shared environment")
     # MAMujoco
-    parser.add_argument("--agent-conf", type=str, default=None)
-    parser.add_argument("--agent-obsk", type=int, default=0)
+    parser.add_argument("--agent-conf", type=str, default="2x3")
+    parser.add_argument("--agent-obsk", type=int, default=None)
 
     # Misc
     parser.add_argument(
         "--seed", type=int, default=1,
         help="Sets Gym, PyTorch and Numpy seeds")
     parser.add_argument(
+        "--log-path", type=str, default=".",
+        help="Path to save log files"
+    )
+    parser.add_argument(
         "--prefix", type=str, default="",
         help="Prefix for tb_writer and logging")
+    parser.add_argument(
+        "--model-path", type=str, default=".",
+        help="Path where pretrained models save"
+    )
+    parser.add_argument(
+        "--save-interval", type=int, default=0,
+        help="Frequency of saving model"
+    )
     parser.add_argument(
         "--config", type=str, default=None,
         help="Config that replaces default params with experiment specific params")
@@ -144,12 +228,14 @@ if __name__ == "__main__":
         load_config(args)
 
     # Set log name
-    args.log_name = \
-        "env::%s_seed::%s_opponent_shaping::%s_traj_batch_size::%s_chain_horizon::%s_" \
-        "actor_lr_inner::%s_actor_lr_outer::%s_value_lr::%s_entropy_weight::%s_" \
-        "max_grad_clip::%s_prefix::%s_log" % (
-            args.env_name, args.seed, args.opponent_shaping, args.traj_batch_size, args.chain_horizon,
-            args.actor_lr_inner, args.actor_lr_outer, args.value_lr, args.entropy_weight,
-            args.max_grad_clip, args.prefix)
+    # args.log_name = \
+    #     "env::%s_seed::%s_opponent_shaping::%s_traj_batch_size::%s_chain_horizon::%s_" \
+    #     "actor_lr_inner::%s_actor_lr_outer::%s_value_lr::%s_entropy_weight::%s_" \
+    #     "max_grad_clip::%s_prefix::%s_log" % (
+    #         args.env_name, args.seed, args.opponent_shaping, args.traj_batch_size, args.chain_horizon,
+    #         args.actor_lr_inner, args.actor_lr_outer, args.value_lr, args.entropy_weight,
+    #         args.max_grad_clip, args.prefix)
+    # Too long!
+    args.log_name = "log"
 
     main(args=args)

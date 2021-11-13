@@ -1,15 +1,18 @@
-import torch
+from collections import OrderedDict
+from copy import deepcopy
+
 import gym
 import numpy as np
+import torch
 import torch.nn.functional as F
 from gym_env import make_env
-from meta.dice import get_dice_loss
-from meta.linear_baseline import LinearFeatureBaseline
+from misc.rl_utils import get_return
+from misc.torch_utils import get_named_parameters, get_parameters
 from torch.autograd import Variable
 from torch.distributions import Categorical, Normal
-from collections import OrderedDict
-from misc.torch_utils import get_parameters, get_named_parameters
-from misc.rl_utils import get_return
+
+from meta.dice import get_dice_loss
+from meta.linear_baseline import LinearFeatureBaseline
 
 
 class Base(object):
@@ -33,8 +36,12 @@ class Base(object):
         self.i_agent = i_agent
         self.rank = rank
 
+        self.__eps = np.finfo(np.float32).eps.item()
+
     def _set_dim(self):
-        env = make_env(self.args)
+        _args = deepcopy(self.args)
+        _args.traj_batch_size = 1
+        env = make_env(_args)
         if isinstance(env.observation_space[self.i_agent], gym.spaces.Box):
             self.input_dim = env.observation_space[self.i_agent].shape[0]
         else:
@@ -51,13 +58,17 @@ class Base(object):
             self.name, self.output_dim))
 
     def _set_action_type(self):
-        env = make_env(self.args)
+        _args = deepcopy(self.args)
+        _args.traj_batch_size = 1
+        env = make_env(_args)
         if isinstance(env.action_space[self.i_agent], gym.spaces.Discrete):
             self.is_discrete_action = True
             self.action_dtype = int
         else:
             self.is_discrete_action = False
             self.action_dtype = float
+        self.observation_space = env.observation_space[self.i_agent]
+        self.action_space = env.action_space[self.i_agent]
         env.close()
 
         self.log[self.args.log_name].info("[{}] Discrete action space: {}".format(
@@ -109,6 +120,15 @@ class Base(object):
             distribution = Normal(loc=mu, scale=scale)
         action = distribution.sample()
         logprob = distribution.log_prob(action)
+
+        # We need to squash action into [action_space.low, action_space.high]
+        action_scale = torch.from_numpy(
+            (self.action_space.high - self.action_space.low) / 2.0).float()
+        squashed_action = torch.tanh(action)
+        logprob = logprob - torch.log(
+            action_scale * (1 - squashed_action.pow(2)) + self.__eps
+        ).sum(-1, keepdim=True)
+
         if len(logprob.shape) == 2:
             logprob = torch.sum(logprob, dim=-1)
         entropy = distribution.entropy()
@@ -122,7 +142,7 @@ class Base(object):
         else:
             value = None
 
-        return action.numpy().astype(self.action_dtype), logprob, entropy, value
+        return squashed_action.numpy().astype(self.action_dtype), logprob, entropy, value
 
     def inner_update(self, actor, memory, i_joint, is_train):
         if i_joint == self.args.chain_horizon:
@@ -132,7 +152,8 @@ class Base(object):
 
         # Compute value for baseline
         reward = rewards[self.i_agent]
-        value = self.linear_baseline(obs, reward)
+        ob = obs[self.i_agent]
+        value = self.linear_baseline(ob, reward)
 
         # Compute DiCE loss
         actor_loss = get_dice_loss(logprobs, reward, value, self.args, self.i_agent, is_train)

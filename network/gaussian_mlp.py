@@ -62,9 +62,11 @@ class ValueNetwork(nn.Module):
     def forward(self, x, params=None):
         if params is None:
             params = OrderedDict(self.named_parameters())
+        
+        x, (hx, cx) = x
 
         x = F.relu(F.linear(x, weight=params[self.name + "_l1.weight"], bias=params[self.name + "_l1.bias"]))
         x = F.relu(F.linear(x, weight=params[self.name + "_l2.weight"], bias=params[self.name + "_l2.bias"]))
         x = F.linear(x, weight=params[self.name + "_l3.weight"], bias=params[self.name + "_l3.bias"])
 
-        return x
+        return x, (hx, cx)

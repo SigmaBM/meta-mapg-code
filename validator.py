@@ -16,7 +16,7 @@ def meta_val(shared_meta_agent, process_dict, rank, log, args):
     val_iteration, best_score = 0, -np.inf
 
     # Set thread-specific tb_writer
-    tb_writer = SummaryWriter('./log/tb_{0}/rank::{1}'.format(args.log_name, str(rank)))
+    tb_writer = SummaryWriter(args.log_path + '/log/tb_{0}/rank::{1}'.format(args.log_name, str(rank)))
 
     # Set thread-specific env
     env = make_env(args)

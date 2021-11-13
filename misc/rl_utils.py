@@ -1,5 +1,6 @@
-import torch
 import numpy as np
+import torch
+
 from misc.replay_memory import ReplayMemory
 
 
@@ -30,8 +31,8 @@ def collect_trajectory(agents, actors, env, args):
     for timestep in range(args.ep_horizon):
         # Get actions
         actions, logprobs, entropies, values = [], [], [], []
-        for agent, actor in zip(agents, actors):
-            action, logprob, entropy, value = agent.act(obs, actor)
+        for agent, actor, ob in zip(agents, actors, obs):
+            action, logprob, entropy, value = agent.act(ob, actor)
             actions.append(action)
             logprobs.append(logprob)
             entropies.append(entropy)
@@ -51,9 +52,11 @@ def collect_trajectory(agents, actors, env, args):
         # Update scores
         for i_agent in range(args.n_agent):
             if isinstance(rewards, list):
-                reward = np.mean(rewards[i_agent]) / float(args.ep_horizon)
+                # reward = np.mean(rewards[i_agent]) / float(args.ep_horizon)
+                reward = np.mean(rewards[i_agent])
             else:
-                reward = np.mean(rewards[:, i_agent]) / float(args.ep_horizon)
+                # reward = np.mean(rewards[:, i_agent]) / float(args.ep_horizon)
+                reward = np.mean(rewards[:, i_agent])
             scores[i_agent] += reward
 
         # For next timestep

@@ -1,12 +1,15 @@
+import os
 import random
-import torch
+
 import numpy as np
+import torch
+from tensorboardX import SummaryWriter
+
 from gym_env import make_env
 from meta.meta_agent import MetaAgent
 from meta.peer import Peer
 from misc.rl_utils import collect_trajectory
 from misc.utils import log_performance
-from tensorboardX import SummaryWriter
 
 torch.set_num_threads(1)
 
@@ -16,7 +19,7 @@ def meta_train(shared_meta_agent, process_dict, rank, log, args):
     train_iteration = 0
 
     # Set thread-specific tb_writer
-    tb_writer = SummaryWriter('./log/tb_{0}/rank::{1}'.format(args.log_name, str(rank)))
+    tb_writer = SummaryWriter(args.log_path + '/log/tb_{0}/rank::{1}'.format(args.log_name, str(rank)))
 
     # Set thread-specific env
     env = make_env(args)
@@ -84,6 +87,13 @@ def meta_train(shared_meta_agent, process_dict, rank, log, args):
         # Update train_iteration
         train_iteration += 1
         process_dict[str(rank) + "/train_iteration"] = train_iteration
+
+        if rank == 0 and args.save_interval > 0 and train_iteration % args.save_interval == 0:
+            # Save model in process 0
+            os.makedirs(args.log_path + '/models', exist_ok=True)
+            save_path = args.log_path + "/models/" + str(train_iteration)
+            print(f"[Rank::0] Save model to {save_path} at iteration {train_iteration}.")
+            torch.save(shared_meta_agent, save_path)
 
         # Terminate train
         if train_iteration >= args.max_train_iteration:

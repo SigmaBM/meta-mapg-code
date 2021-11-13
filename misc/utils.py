@@ -1,7 +1,8 @@
-import yaml
 import logging
+
 import git
 import numpy as np
+import yaml
 
 
 def load_config(args, path="."):
@@ -56,7 +57,7 @@ def set_log(args, path="."):
     log = {}
     set_logger(
         logger_name=args.log_name,
-        log_file=r'{0}{1}'.format("./log/", args.log_name))
+        log_file=r'{0}{1}'.format(args.log_path + "/log/", args.log_name))
     log[args.log_name] = logging.getLogger(args.log_name)
 
     for arg, value in sorted(vars(args).items()):
@@ -100,6 +101,10 @@ def log_performance(scores, log, tb_writer, args, i_joint, iteration, rank, is_t
     """
     for i_agent, score in enumerate(scores):
         log[args.log_name].info(
+            "[Rank::{}] At iteration {}, reward: {:.5f} for agent {} at joint policy {}".format(
+                rank, iteration, score, i_agent, i_joint))
+        # In case that logging does not in multiprocessing
+        print(
             "[Rank::{}] At iteration {}, reward: {:.5f} for agent {} at joint policy {}".format(
                 rank, iteration, score, i_agent, i_joint))
 

@@ -21,6 +21,7 @@ class MetaAgent(Base):
     """
     def __init__(self, log, tb_writer, args, name, i_agent, rank=-1):
         super(MetaAgent, self).__init__(log, tb_writer, args, name, i_agent, rank)
+        self._use_rnn = args.use_rnn
 
         self._set_dim()
         self._set_action_type()
@@ -30,11 +31,19 @@ class MetaAgent(Base):
 
     def _set_policy(self):
         if self.is_discrete_action:
-            from network.categorical_lstm import ActorNetwork, ValueNetwork
-            self.log[self.args.log_name].info("[{}] Set Categorical LSTM policy".format(self.name))
+            if self._use_rnn:
+                from network.categorical_lstm import ActorNetwork, ValueNetwork
+                self.log[self.args.log_name].info("[{}] Set Categorical LSTM policy".format(self.name))
+            else:
+                from network.categorical_mlp import ActorNetwork, ValueNetwork
+                self.log[self.args.log_name].info("[{}] Set Categorical MLP policy".format(self.name))
         else:
-            from network.gaussian_lstm import ActorNetwork, ValueNetwork
-            self.log[self.args.log_name].info("[{}] Set Gaussian LSTM policy".format(self.name))
+            if self._use_rnn:
+                from network.gaussian_lstm import ActorNetwork, ValueNetwork
+                self.log[self.args.log_name].info("[{}] Set Gaussian LSTM policy".format(self.name))
+            else:
+                from network.gaussian_mlp import ActorNetwork, ValueNetwork
+                self.log[self.args.log_name].info("[{}] Set Gaussian MLP policy".format(self.name))
 
         self.actor = ActorNetwork(self.input_dim, self.output_dim, self.name, self.args)
         self.log[self.args.log_name].info("[{}] {}".format(self.name, self.actor))

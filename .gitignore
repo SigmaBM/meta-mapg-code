@@ -110,6 +110,8 @@ venv/
 notebook/data/
 pytorch_models/
 debug/
+pretrain_model/
+videos/
 
 # PyTorch files
 *.pth
@@ -125,3 +127,6 @@ Q.md
 
 # Vscode
 .vscode/
+
+# Mujoco
+MUJOCO_LOG.TXT
