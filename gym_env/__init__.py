@@ -2,6 +2,7 @@ import gym
 from gym.envs.registration import register
 from .mujoco.src.multiagent_mujoco import MujocoMulti
 from .multiprocessing_env import DummyVecMAEnv
+from .wrapper import Wrapper
 
 
 register(
@@ -25,8 +26,9 @@ def make_each_env(args):
             "agent_conf": args.agent_conf,
             "agent_obsk": args.agent_obsk,
             "episode_limit": args.ep_horizon,
+            "inv_rew": False,
         }
-        env = MujocoMulti(env_args=env_args)
+        env = Wrapper(MujocoMulti(env_args=env_args))
         return env
     return thunk
 

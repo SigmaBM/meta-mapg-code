@@ -137,7 +137,7 @@ class MujocoMulti(MultiAgentEnv):
             else:
                 info["episode_limit"] = True    # the next state will not be masked out
 
-        return self.get_obs(), reward_n, done_n, info
+        return self.get_obs(), [reward_n, reward_n], done_n, info
 
     def get_obs(self):
         """ Returns all agent observat3ions in a list """
@@ -195,13 +195,13 @@ class MujocoMulti(MultiAgentEnv):
         return self.get_obs()
     
     def seed(self, seed):
-        self.env.seed(seed)
+        return self.env.seed(seed)
 
     def render(self, **kwargs):
-        self.env.render(**kwargs)
+        return self.env.render(**kwargs)
 
     def close(self):
-        self.env.close()
+        return self.env.close()
 
     def get_env_info(self):
         env_info = {"state_shape": self.get_state_size(),

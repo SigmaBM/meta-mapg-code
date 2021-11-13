@@ -1,6 +1,9 @@
-import numpy as np
-from multiprocessing import Process, Pipe
+import os
 from copy import deepcopy
+from multiprocessing import Pipe, Process
+from typing import Dict
+
+import numpy as np
 
 
 def worker(remote, parent_remote, env_fn_wrapper):
@@ -220,13 +223,13 @@ class DummyVecMAEnv(VecEnv):
     def step_wait(self):
         for e in range(self.num_envs):
             action = [self.actions[i][e] for i in range(self.num_agents)]
-            rew, self.buf_dones[e], self.buf_infos[e] = self.envs[e].step(action)
+            obs, rew, self.buf_dones[e], self.buf_infos[e] = self.envs[e].step(action)
 
-            if len(rew) == 1:
+            if not hasattr(rew, "__iter__"):
                 # shared reward
                 rew = [rew for _ in range(self.num_agents)]
             self.buf_state[e] = self.envs[e].get_state()
-            obs = self.envs[e].get_obs()
+            # obs = self.envs[e].get_obs()
             for i in range(self.num_agents):
                 self.buf_rews[i][e] = rew[i]
                 self.buf_obs[i][e] = obs[i]
@@ -234,8 +237,8 @@ class DummyVecMAEnv(VecEnv):
 
     def reset(self):
         for e in range(self.num_envs):
-            self.buf_state[e] = self.envs[e].reset()
-            obs = self.envs[e].get_obs()
+            obs = self.envs[e].reset()
+            self.buf_state[e] = self.envs[e].get_state()
             for i in range(self.num_agents):
                 self.buf_obs[i][e] = obs[i]
         return deepcopy(self.buf_obs)
@@ -246,6 +249,9 @@ class DummyVecMAEnv(VecEnv):
     def close(self):
         for e in range(self.num_envs):
             self.envs[e].close()
+    
+    def sample_personas(self, is_train, is_val=True, path="./"):
+        return self.envs[0].sample_personas(is_train=is_train, is_val=is_val, path=path)
 
     def __len__(self):
         return self.nenvs
