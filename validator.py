@@ -1,12 +1,14 @@
 import random
-import torch
+
 import numpy as np
+import torch
+from tensorboardX import SummaryWriter
+
+from gym_env import make_env
 from meta.meta_agent import MetaAgent
 from meta.peer import Peer
 from misc.rl_utils import collect_trajectory
 from misc.utils import log_performance
-from gym_env import make_env
-from tensorboardX import SummaryWriter
 
 torch.set_num_threads(1)
 
@@ -74,7 +76,7 @@ def meta_val(shared_meta_agent, process_dict, rank, log, args):
         if score > best_score:
             log[args.log_name].info("Saving best score with {:.3f}".format(score))
             best_score = score
-            path = "./log/tb_" + args.log_name + "/best_model.pth"
+            path = args.log_path + "/best_model.pth"
             checkpoint = {}
             checkpoint["actor"] = meta_agent.actor.state_dict()
             checkpoint["dynamic_lr"] = meta_agent.dynamic_lr.data

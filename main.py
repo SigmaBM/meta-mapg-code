@@ -50,12 +50,12 @@ def main(args):
     
     # Split training, validation and test pretrain model randomly
     if args.env_name not in ["IPD-v0", "RPS-v0"]:
-        split_pretrained_models(args.env_name, args.model_path)
+        split_pretrained_models(args)
 
     # Initialize shared meta-agent
     shared_meta_agent = MetaAgent(log, tb_writer, args, name="meta-agent", i_agent=0)
     shared_meta_agent.share_memory()
-    
+
     if args.resume_path:
         log[log.name].info("Resume training from {}".format(args.resume_path))
 
@@ -90,43 +90,23 @@ def main(args):
 
 
 def split_pretrained_models(
-    task: str,
-    path: str, 
+    args,
     range_tr_va_lb: int = 1,
     range_tr_va_ub: int = 300,
     range_ts_lb: int = 475,
     range_ts_ub: int = 500,
     num_tr: int = 275
 ) -> None:
-    list_all = os.listdir(osp.join(path, "models-1"))
+    model_path = args.model_path if args.model_path is not None else osp.join(".", "pretrain_model", args.env_name)
+    list_all = os.listdir(model_path)
+    # str2int -> sort -> int2str
     list_all = list(map(int, list_all))
     list_all.sort()
     list_all = list(map(str, list_all))
     rand_list_tr_va = np.random.permutation(list_all[range_tr_va_lb - 1: range_tr_va_ub])
-    list_tr = rand_list_tr_va[: num_tr]
-    list_va = rand_list_tr_va[num_tr: ]
-    list_ts = list_all[range_ts_lb - 1: range_ts_ub]
-    # set train
-    os.makedirs(osp.join("pretrain_model", task, "train"), exist_ok=True)
-    print("Copy training persona...")
-    for f in list_tr:
-        old_path = osp.join(path, "models-1", f)
-        new_path = osp.join("pretrain_model", task, "train", f)
-        os.system("cp {} {}".format(old_path, new_path))
-    # set valid
-    os.makedirs(osp.join("pretrain_model", task, "valid"), exist_ok=True)
-    print("Copy validation persona...")
-    for f in list_va:
-        old_path = osp.join(path, "models-1", f)
-        new_path = osp.join("pretrain_model", task, "valid", f)
-        os.system("cp {} {}".format(old_path, new_path))
-    # set test
-    os.makedirs(osp.join("pretrain_model", task, "test"), exist_ok=True)
-    print("Copy testing persona...")
-    for f in list_ts:
-        old_path = osp.join(path, "models-1", f)
-        new_path = osp.join("pretrain_model", task, "test", f)
-        os.system("cp {} {}".format(old_path, new_path))
+    args.list_tr = rand_list_tr_va[: num_tr]
+    args.list_va = rand_list_tr_va[num_tr: ]
+    args.list_ts = list_all[range_ts_lb - 1: range_ts_ub]
 
 
 if __name__ == "__main__":
@@ -210,7 +190,7 @@ if __name__ == "__main__":
         "--prefix", type=str, default="",
         help="Prefix for tb_writer and logging")
     parser.add_argument(
-        "--model-path", type=str, default=".",
+        "--model-path", type=str, default=None,
         help="Path where pretrained models save"
     )
     parser.add_argument(

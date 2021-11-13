@@ -26,5 +26,4 @@ ep_horizon: 200
 # MISC
 #################################################################################
 log_path: "log"
-model_path: "log/HalfCheetah-v2/sac/seed_0_1111_180433-HalfCheetah_v2_sac"
 save_interval: 10

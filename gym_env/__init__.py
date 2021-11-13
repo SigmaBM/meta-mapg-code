@@ -28,7 +28,7 @@ def make_each_env(args):
             "episode_limit": args.ep_horizon,
             "inv_rew": False,
         }
-        env = Wrapper(MujocoMulti(env_args=env_args))
+        env = Wrapper(MujocoMulti(env_args=env_args), args)
         return env
     return thunk
 

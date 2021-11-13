@@ -1,3 +1,4 @@
+from argparse import Namespace
 import os.path as osp
 from typing import Any
 
@@ -10,18 +11,16 @@ class Wrapper(object):
     
         env: gym environment to be wrappered.
     """
-    def __init__(self, env: gym.Env) -> None:
+    def __init__(self, env: gym.Env, args: Namespace) -> None:
         super().__init__()
         self.env = env
-        self.path = osp.join(".", "pretrain_model", env.scenario)
-
-        # only support agent 1 in 2-agent env for now
-        self._get_personas()
-
-    def _get_personas(self) -> None:
-        self.tr_paths = os.listdir(osp.join(self.path, "train"))
-        self.va_paths = os.listdir(osp.join(self.path, "valid"))
-        self.ts_paths = os.listdir(osp.join(self.path, "test"))
+        if args.model_path is None:
+            self.path = osp.join(".", "pretrain_model", env.scenario)
+        else:
+            self.path = args.model_path
+        self.list_tr = args.list_tr
+        self.list_va = args.list_va
+        self.list_ts = args.list_ts
     
     def __getattr__(self, key: str) -> Any:
         return getattr(self.env, key)
@@ -33,17 +32,17 @@ class Wrapper(object):
     def sample_personas(self, is_train, is_val=True, **kwargs):
         if is_train:
             persona = {}
-            persona["iteration"] = np.random.choice(self.tr_paths, 1)[0]
-            persona["filepath"] = osp.join(self.path, "train", persona["iteration"])
+            persona["iteration"] = np.random.choice(self.list_tr, 1)[0]
+            persona["filepath"] = osp.join(self.path, persona["iteration"])
             return [persona]
         if is_val:
             personas = [{
                 "iteration": it,
-                "filepath": osp.join(self.path, "valid", it)
-            } for it in self.va_paths]
+                "filepath": osp.join(self.path, it)
+            } for it in self.list_va]
         else:
             personas = [{
                 "iteration": it,
-                "filepath": osp.join(self.path, "test", it)
-            } for it in self.ts_paths]
+                "filepath": osp.join(self.path, it)
+            } for it in self.list_ts]
         return personas
