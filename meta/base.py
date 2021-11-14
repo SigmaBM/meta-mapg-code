@@ -121,13 +121,14 @@ class Base(object):
         action = distribution.sample()
         logprob = distribution.log_prob(action)
 
-        # We need to squash action into [action_space.low, action_space.high]
-        action_scale = torch.from_numpy(
-            (self.action_space.high - self.action_space.low) / 2.0).float()
-        squashed_action = torch.tanh(action)
-        logprob = logprob - torch.log(
-            action_scale * (1 - squashed_action.pow(2)) + self.__eps
-        ).sum(-1, keepdim=True)
+        if not self.is_discrete_action:
+            # We need to squash action into [action_space.low, action_space.high]
+            action_scale = torch.from_numpy(
+                (self.action_space.high - self.action_space.low) / 2.0).float()
+            action = torch.tanh(action)
+            logprob = logprob - torch.log(
+                action_scale * (1 - action.pow(2)) + self.__eps
+            ).sum(-1, keepdim=True)
 
         if len(logprob.shape) == 2:
             logprob = torch.sum(logprob, dim=-1)
@@ -142,7 +143,7 @@ class Base(object):
         else:
             value = None
 
-        return squashed_action.numpy().astype(self.action_dtype), logprob, entropy, value
+        return action.numpy().astype(self.action_dtype), logprob, entropy, value
 
     def inner_update(self, actor, memory, i_joint, is_train):
         if i_joint == self.args.chain_horizon:
