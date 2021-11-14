@@ -140,7 +140,7 @@ def main(args=get_args()):
     # log
     t0 = datetime.datetime.now().strftime("%m%d_%H%M%S")
     log_file = f'seed_{args.seed}_{t0}-{args.task.replace("-", "_")}_sac'
-    log_path = os.path.join(args.logdir, args.task, 'sac', log_file)
+    log_path = os.path.join(args.logdir, 'sac', args.task, log_file)
     writer = SummaryWriter(log_path)
     writer.add_text("args", str(args))
     logger = BasicLogger(writer)
